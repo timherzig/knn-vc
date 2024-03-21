@@ -81,6 +81,7 @@ def main(args):
         Path(args.out_path),
         SYNTH_WEIGHTINGS,
         MATCH_WEIGHTINGS,
+        args.resume,
     )
     print("All done!", flush=True)
 
@@ -174,9 +175,10 @@ def extract(
     os.makedirs(out_path, exist_ok=True)
 
     # file to write to
-    with open(f"{out_path}/metadata.csv", "w+") as f:
-        f.write("audio_path,feat_path\n")
-        f.close()
+    if not args.resume:
+        with open(f"{out_path}/metadata.csv", "w+") as f:
+            f.write("audio_path,feat_path\n")
+            f.close()
 
     for i, row in pb:
         rel_path = Path(row.path).relative_to(ls_path)
@@ -197,16 +199,23 @@ def extract(
                 )  # (seq_len, dim)
             except:
                 print(
-                    f"Error with {row.path}, source_feats shape: {source_feats.shape}, match_weights shape: {match_weights.shape}, skipping."
+                    f"Error with {row.path}\n       source_feats  shape: {source_feats.shape}\n      match_weights shape: {match_weights.shape}\n        skipping."
                 )
                 feature_cache.clear()
                 synthesis_cache.clear()
                 gc.collect()
                 continue
 
-        matching_pool, synth_pool = path2pools(
-            row.path, wavlm, match_weights, synth_weights, device, df, row.speaker
-        )
+        try:
+            matching_pool, synth_pool = path2pools(
+                row.path, wavlm, match_weights, synth_weights, device, df, row.speaker
+            )
+        except:
+            print(f"Error with {row.path}\n       skipping.")
+            feature_cache.clear()
+            synthesis_cache.clear()
+            gc.collect()
+            continue
 
         if not args.prematch:
             out_feats = source_feats.cpu()
@@ -217,7 +226,7 @@ def extract(
 
         # save matched sequence
         if i < 3:
-            print("Feature has shape: ", out_feats.shape, flush=True)
+            print("Feature has shape: ", out_feats.shape)
         # 3. save
         torch.save(out_feats.cpu().half(), str(targ_path))
         if hasattr(pb, "child"):
@@ -233,7 +242,7 @@ def extract(
             f.close()
 
         if i % 1000 == 0:
-            print(f"Done {i:,d}/{len(df):,d}", flush=True)
+            print(f"Done {i}/{len(df)}\n")
             feature_cache.clear()
             synthesis_cache.clear()
             gc.collect()
