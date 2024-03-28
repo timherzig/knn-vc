@@ -137,3 +137,6 @@ slurm/
 
 # checkpoints
 checkpoints/
+
+# inference
+inference/

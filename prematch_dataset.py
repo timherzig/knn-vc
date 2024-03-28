@@ -3,6 +3,7 @@ import gc
 import os
 import sys
 import time
+from shutil import copyfile
 from pathlib import Path
 
 import numpy as np
@@ -34,7 +35,7 @@ def make_iemocap_df(root_path: Path) -> pd.DataFrame:
 
 def make_librispeech_df(root_path: Path) -> pd.DataFrame:
     all_files = []
-    folders = ["train-clean-100", "dev-clean"]
+    folders = ["train-clean-100", "train-clean-360", "dev-clean", "dev-clean-2"]
     print(f"[LIBRISPEECH] Computing folders {folders}")
     for f in folders:
         all_files.extend(list((root_path / f).rglob("**/*.flac")))
@@ -65,6 +66,12 @@ def main(args):
     elif args.dataset == "iemocap":
         df = make_iemocap_df(Path(args.iemocap_path))
         path = args.iemocap_path
+    elif args.dataset == "all":
+        df_libri = make_librispeech_df(Path(args.librispeech_path))
+        df_libri["ls_path"] = args.librispeech_path
+        df_iemo = make_iemocap_df(Path(args.iemocap_path))
+        df_iemo["ls_path"] = args.iemocap_path
+        df = pd.concat([df_libri, df_iemo], ignore_index=True)
     else:
         raise ValueError(f"Unknown dataset {args.dataset}")
 
@@ -77,11 +84,10 @@ def main(args):
         df,
         wavlm,
         args.device,
-        Path(path),
+        # Path(path),
         Path(args.out_path),
         SYNTH_WEIGHTINGS,
         MATCH_WEIGHTINGS,
-        args.resume,
     )
     print("All done!", flush=True)
 
@@ -164,7 +170,7 @@ def extract(
     df: pd.DataFrame,
     wavlm: nn.Module,
     device,
-    ls_path: Path,
+    # ls_path: Path,
     out_path: Path,
     synth_weights: Tensor,
     match_weights: Tensor,
@@ -181,8 +187,9 @@ def extract(
             f.close()
 
     for i, row in pb:
-        rel_path = Path(row.path).relative_to(ls_path)
+        rel_path = Path(row.path).relative_to(row.ls_path)
         targ_path = (out_path / rel_path).with_suffix(".pt")
+        targ_path_raw = out_path / rel_path
         if args.resume:
             if targ_path.is_file():
                 continue
@@ -229,6 +236,7 @@ def extract(
             print("Feature has shape: ", out_feats.shape)
         # 3. save
         torch.save(out_feats.cpu().half(), str(targ_path))
+        copyfile(row.path, targ_path_raw)
         if hasattr(pb, "child"):
             pb.child.comment = str(rel_path)
             pb.child.wait_for = min(pb.child.wait_for, 10)
@@ -238,7 +246,7 @@ def extract(
         pb.comment = str(rel_path)
 
         with open(f"{out_path}/metadata.csv", "a") as f:
-            f.write(f"{ls_path}/{rel_path},{targ_path}\n")
+            f.write(f"{targ_path_raw},{targ_path}\n")
             f.close()
 
         if i % 1000 == 0:
