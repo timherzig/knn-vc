@@ -10,10 +10,10 @@ import json
 def plot_spectrogram(spectrogram):
     import matplotlib.pylab as plt
     import matplotlib
+
     matplotlib.use("Agg")
     fig, ax = plt.subplots(figsize=(10, 2))
-    im = ax.imshow(spectrogram, aspect="auto", origin="lower",
-                   interpolation='none')
+    im = ax.imshow(spectrogram, aspect="auto", origin="lower", interpolation="none")
     plt.colorbar(im, ax=ax)
 
     fig.canvas.draw()
@@ -35,7 +35,7 @@ def apply_weight_norm(m):
 
 
 def get_padding(kernel_size, dilation=1):
-    return int((kernel_size*dilation - dilation)/2)
+    return int((kernel_size * dilation - dilation) / 2)
 
 
 def load_checkpoint(filepath, device):
@@ -53,7 +53,7 @@ def save_checkpoint(filepath, obj):
 
 
 def scan_checkpoint(cp_dir, prefix):
-    pattern = os.path.join(cp_dir, prefix + '*')
+    pattern = os.path.join(cp_dir, prefix + "*")
     cp_list = glob.glob(pattern)
     if len(cp_list) == 0:
         return None

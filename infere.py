@@ -1,34 +1,29 @@
 import os
+import sys
 import argparse
 import torch, torchaudio
 
-from hifigan.models import Generator
 from hifigan.utils import load_checkpoint
+from hubconf import knn_vc
 
 
 def infere(src_wav_path, ref_wav_paths, model, device):
     # Load the model
-    knn_vc = torch.hub.load(
-        "bshall/knn-vc", "knn_vc", prematched=True, trust_repo=True, pretrained=True
-    )
-    knn_vc = knn_vc.to(device)
+    knn_vc_model = knn_vc(remove_weight_norm=False)
+    knn_vc_model = knn_vc_model.to(device)
 
-    # Load the checkpoint
-    checkpoint = load_checkpoint(model, device)
-    checkpoint["generator"] = {
-        k.replace("_v", ""): v for k, v in checkpoint["generator"].items()
-    }
-    g_keys = [i for i in list(checkpoint["generator"].keys()) if "_g" in i]
-    for k in g_keys:
-        checkpoint["generator"].pop(k)
+    # # Load the checkpoint
+    checkpoint = load_checkpoint(model, device)["generator"]
+    knn_vc_model.hifigan.load_state_dict(checkpoint)
 
-    knn_vc.hifigan.load_state_dict(checkpoint["generator"])
+    # # Set the model to evaluation mode and remove weight normalization
+    knn_vc_model.hifigan.eval()
+    knn_vc_model.hifigan.remove_weight_norm()
 
-    query_seq = knn_vc.get_features(src_wav_path)
-    matching_set = knn_vc.get_matching_set(ref_wav_paths)
+    query_seq = knn_vc_model.get_features(src_wav_path)
+    matching_set = knn_vc_model.get_matching_set(ref_wav_paths)
 
-    out_wav = knn_vc.match(query_seq, matching_set, topk=4).unsqueeze(0)
-    print(out_wav.shape)
+    out_wav = knn_vc_model.match(query_seq, matching_set, topk=4).unsqueeze(0)
 
     os.makedirs("inference", exist_ok=True)
     torchaudio.save("inference/out.wav", out_wav, 16000)
